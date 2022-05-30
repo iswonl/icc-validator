@@ -3,6 +3,7 @@ extern crate iron;
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
+use pqcrypto_dilithium::dilithium2::*;
 
 mod models;
 
@@ -20,6 +21,11 @@ fn hello_world(_: &mut Request) -> IronResult<Response> {
 }
 
 fn main() {
+    let message = vec![0, 1, 2, 3, 4, 5];
+    let (pk, sk) = keypair();
+    let sm = sign(&message, &sk);
+    let verifiedmsg = open(&sm, &pk).unwrap();
+    assert!(verifiedmsg == message);
     println!("Running on http://localhost:8080");
     Iron::new(hello_world).http("localhost:8080").unwrap();
 }
