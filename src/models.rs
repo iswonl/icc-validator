@@ -1,7 +1,3 @@
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Status {
-    pub code: bool,
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct IccSignRequest {
@@ -9,6 +5,7 @@ pub struct IccSignRequest {
     pub from_account: String,
     pub to_account: String,
     pub signature: String,
+    pub validator_signature: String,
 }
 
 #[derive(Serialize, Deserialize)]

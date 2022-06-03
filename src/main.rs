@@ -9,7 +9,6 @@ use iron::{StatusCode};
 mod models;
 use iron::{Iron, Request, Response, IronResult};
 use crate::models::{IccSignRequest, IccKeyGenResponse, IccWalletSignRequest};
-use self::models::Status;
 use pqcrypto_traits::sign::*;
 use pqcrypto_dilithium::dilithium2::*;
 use iron::headers;
@@ -25,7 +24,20 @@ lazy_static! {
         Mutex::new(m)
     };    
 }
+lazy_static! {
+    static ref VALIDATOR_SK: Mutex<String> = {
+        let (_, sk) = keypair();
+        let sk_str = base64::encode(sk.as_bytes());
+        Mutex::new(sk_str)
+    };    
+}
 
+fn val_sign(message: String) -> String {
+    let s = VALIDATOR_SK.lock().unwrap();
+    let b = base64::decode(s.as_str()).unwrap();
+    let sk =  pqcrypto_dilithium::dilithium2::SecretKey::from_bytes(&b).unwrap();
+    sha2(sign(message.as_bytes(), &sk).as_bytes())
+}
 
 fn verify(s: &str) -> String {
     let icc: IccSignRequest = serde_json::from_str(s).unwrap();
@@ -39,13 +51,16 @@ fn verify(s: &str) -> String {
     
     let pk = pqcrypto_dilithium::dilithium2::PublicKey::from_bytes(pubkey.as_slice()).unwrap();
     let sig = pqcrypto_dilithium::dilithium2::DetachedSignature::from_bytes(signature.as_slice()).unwrap();
-    let  code =  !verify_detached_signature(&sig, &msg, &pk).ok().is_none();
-    
-    let status = Status {
-        code: code,
-    };
-    let serialized = serde_json::to_string(&status).unwrap();
-    println!("Verification code: {0}", status.code);
+    let  isok =  !verify_detached_signature(&sig, &msg, &pk).ok().is_none();
+
+
+    let mut resp_icc: IccSignRequest = serde_json::from_str(s).unwrap();
+    if isok {
+        resp_icc.validator_signature = val_sign(s.to_string());
+    }
+
+    let serialized = serde_json::to_string(&resp_icc).unwrap();
+    println!("Verification: {0}", serialized);
 
     return serialized;
 }
@@ -118,6 +133,6 @@ fn main() {
     let verifiedmsg = open(&sm, &pk).unwrap();
     assert!(verifiedmsg == message);
 
-    println!("Running on http://localhost:8080");
+    println!("Running on http://0.0.0.0:8080");
     Iron::new(icc_verify).http("0.0.0.0:8080");
 }
