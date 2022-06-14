@@ -90,11 +90,12 @@ fn icc_verify(request: &mut Request) -> IronResult<Response> {
             let pk_hash= sha2(pk.as_bytes());
 
             let mut map = HASHMAP.lock().unwrap();
-            map.insert(pk_hash.clone(), pk_str);
-
+            map.insert(pk_hash.clone(), pk_str.clone());
 
             let sk = base64::encode(sk.as_bytes());
-            let r = IccKeyGenResponse {pk_hash: pk_hash,sk: sk};
+            println!( "--- Sk----, {}", sk);
+            println!( "--- PK----, {}", pk_str);
+            let r = IccKeyGenResponse {pk_hash: pk_hash,sk: sk, pk: pk_str};
             serialized = serde_json::to_string(&r).unwrap();
         }  else if s.to_string().contains("message") {
             let icc: IccWalletSignRequest = serde_json::from_str(s).unwrap();
@@ -106,9 +107,9 @@ fn icc_verify(request: &mut Request) -> IronResult<Response> {
             let sig_hash = sha2(det_sig.as_bytes());
 
             let mut map = HASHMAP.lock().unwrap();
-            map.insert(sig_hash.clone(), sm);
+            map.insert(sig_hash.clone(), sm.clone());
 
-            let r = IccWalletSignRequest {message: sig_hash,sk: "".to_string()};
+            let r = IccWalletSignRequest {message: sig_hash,sk: sm.to_string()};
             serialized = serde_json::to_string(&r).unwrap();
         }
       
@@ -133,6 +134,6 @@ fn main() {
     let verifiedmsg = open(&sm, &pk).unwrap();
     assert!(verifiedmsg == message);
 
-    println!("Running on http://0.0.0.0:8080");
-    Iron::new(icc_verify).http("0.0.0.0:8080");
+    println!("Running on http://0.0.0.0:8081");
+    Iron::new(icc_verify).http("0.0.0.0:8081");
 }

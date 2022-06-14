@@ -15,7 +15,8 @@ pub struct IccKeyGenRequest {
 #[derive(Serialize, Deserialize)]
 pub struct IccKeyGenResponse {
     pub pk_hash: String,
-    pub sk: String
+    pub sk: String,
+    pub pk: String
 }
 
 #[derive(Serialize, Deserialize)]
