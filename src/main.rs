@@ -42,10 +42,10 @@ fn val_sign(message: String) -> String {
 fn verify(s: &str) -> String {
     let icc: IccSignRequest = serde_json::from_str(s).unwrap();
     let map = HASHMAP.lock().unwrap();
-    let pub_key_str = map.get(&icc.pk_hash).unwrap();
+    let pub_key_str = map.get(&icc.sender_hash).unwrap();
     let pubkey = base64::decode(pub_key_str).unwrap();
 
-    let msg = base64::decode(icc.from_account).unwrap();
+    let msg = base64::decode(icc.sender_hash).unwrap();
     let sig_str = map.get(&icc.signature).unwrap();
     let signature = base64::decode(sig_str).unwrap();
     
@@ -82,20 +82,20 @@ fn icc_verify(request: &mut Request) -> IronResult<Response> {
         let cnt = request.get_body_contents().unwrap();
         let s = std::str::from_utf8(cnt).unwrap();
         println!( "{0}", s);
-        if s.to_string().contains("pk_hash") {
+        if s.to_string().contains("sender_hash") {
             serialized =  verify(s);
         } else if s.to_string().contains("key_gen") {
             let (pk, sk) = keypair();
             let pk_str = base64::encode(pk.as_bytes());
-            let pk_hash= sha2(pk.as_bytes());
+            let sender_hash= sha2(pk.as_bytes());
 
             let mut map = HASHMAP.lock().unwrap();
-            map.insert(pk_hash.clone(), pk_str.clone());
+            map.insert(sender_hash.clone(), pk_str.clone());
 
             let sk = base64::encode(sk.as_bytes());
             println!( "--- Sk----, {}", sk);
             println!( "--- PK----, {}", pk_str);
-            let r = IccKeyGenResponse {pk_hash: pk_hash,sk: sk, pk: pk_str};
+            let r = IccKeyGenResponse {sender_hash: sender_hash,sk: sk, pk: pk_str};
             serialized = serde_json::to_string(&r).unwrap();
         }  else if s.to_string().contains("message") {
             let icc: IccWalletSignRequest = serde_json::from_str(s).unwrap();

@@ -1,8 +1,7 @@
 
 #[derive(Serialize, Deserialize)]
 pub struct IccSignRequest {
-    pub pk_hash: String,
-    pub from_account: String,
+    pub sender_hash: String,
     pub to_account: String,
     pub signature: String,
     pub validator_signature: String,
@@ -14,7 +13,7 @@ pub struct IccKeyGenRequest {
 }
 #[derive(Serialize, Deserialize)]
 pub struct IccKeyGenResponse {
-    pub pk_hash: String,
+    pub sender_hash: String,
     pub sk: String,
     pub pk: String
 }
