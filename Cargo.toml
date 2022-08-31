@@ -3,16 +3,19 @@ name = "icc-validator"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-lazy_static = "1.4.0"
+actix-web = "4"
+actix-cors = "0.6.1"
+ipfs-api = { version = "0.15.0", features = ["with-actix"], default-features = false }
 pqcrypto-dilithium = "0.4.5"
 pqcrypto-traits = "0.3.4"
-iron = { git = "https://github.com/iron/iron" }
-serde = "1.0.8"
-serde_derive = "1.0.8"
-serde_json = "1.0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+futures = "0.3"
+sha2 = "0.10.2"
 base64 = "0.13.0"
+base58 = "0.2.0"
 bincode = "1.3.3"
-sha2 ="0.10.2"
+lazy_static = "1.4.0"
+borsh = "0.9.3"
+borsh-derive = "0.9.1"
