@@ -17,7 +17,9 @@ pub mod icc_types;
 pub mod icc_token;
 pub mod save_data;
 pub mod hasher;
+pub mod errors;
 
+use errors::*;
 use icc_types::*;
 use icc_token::*;
 use save_data::*;
@@ -47,26 +49,27 @@ lazy_static! {
     pub static ref IPFS_PORT: u16 = env::var("IPFS_PORT").expect("Missing IPFS_PORT env variable").parse().unwrap();
 }
 
-pub async fn ipfsSave(client: &web::Data<Mutex<IpfsClient>>, data: Vec<u8>) -> Result<[u8;32], String>{
-    match client.lock().unwrap().add(Cursor::new(data)).await{
-        Ok(res) => Ok(IpfsHash::decode(res.hash)),
-        Err(e) => Err(e.to_string()),
-    }
+
+#[derive(Deserialize, Serialize)]
+pub struct ErrorResult {
+    pub error: String,
 }
 
-pub async fn ipfsGet(client: &web::Data<Mutex<IpfsClient>>, hash: [u8;32]) -> Vec<u8>{
+pub async fn ipfsSave(client: &web::Data<Mutex<IpfsClient>>, data: Vec<u8>) -> [u8;32]{
+    let res =  client.lock().unwrap().add(Cursor::new(data)).await.unwrap();
+    IpfsHash::decode(res.hash).unwrap()
+}
+
+pub async fn ipfsGet(client: &web::Data<Mutex<IpfsClient>>, hash: [u8;32]) -> Result<Vec<u8>, IccError>{
     let data = client.lock().unwrap()
     .cat(IpfsHash::encode(hash).as_str())
     .map_ok(|ok| ok.to_vec())
     .try_concat()
-    .await.unwrap();
-    data
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct StoreData {
-    name: String,
-    data: String,
+    .await;
+    if data.is_err() {
+        return Err(IccError::IpfsHashError);
+    }
+    Ok(data.unwrap())
 }
 
 #[get("/")]
@@ -80,7 +83,11 @@ async fn get_transaction_info_list(client: web::Data<Mutex<IpfsClient>>, data: w
     println!("-----get transaction info list-----");
     let pubkey: [u8;64] = base64::decode(data.0.public_key).unwrap().try_into().unwrap();
 
-    let mut hash = IpfsHash::decode(data.0.block_hash);
+    let hash = IpfsHash::decode(data.0.block_hash);
+    if hash.is_err() {
+        return Ok(HttpResponse::Ok().json(ErrorJson::new(IPFS_HASH_ERROR)));
+    }
+    let mut hash = hash.unwrap();
     
     let mut list: Vec<QntTransactionInfoJson> = vec![];
 
@@ -88,10 +95,16 @@ async fn get_transaction_info_list(client: web::Data<Mutex<IpfsClient>>, data: w
 
     while(do_scan){
         let data = ipfsGet(&client, hash).await;
+        if data.is_err() {
+            return Ok(HttpResponse::Ok().json(ErrorJson::new(IPFS_HASH_ERROR)));
+        }
+        let data = data.unwrap();
+
         let info = &QntTransactionInfo::try_from_slice(data.as_slice()).unwrap();
         
         if(info.from_pubkey == pubkey || info.to_pubkey == pubkey){
-            let info = QntTransactionInfoJson::from(&info);
+            let mut info = QntTransactionInfoJson::from(&info);
+            info.block_hash = IpfsHash::encode(hash);
             list.push(info);
         }
 
@@ -110,7 +123,7 @@ async fn save_transaction_info(client: web::Data<Mutex<IpfsClient>>, data: web::
     println!("-----save transaction info-----");
 
     let data = data.0.data;
-    let hash = ipfsSave(&client, data).await.unwrap();
+    let hash = ipfsSave(&client, data).await;
     let hash = IpfsHash::encode(hash);
     println!("save hash: {}", hash);
 
@@ -127,7 +140,17 @@ async fn get_transaction_info(client: web::Data<Mutex<IpfsClient>>, data: web::J
     println!("get data from hash: {}", data.0.data);
 
     let hash = IpfsHash::decode(data.0.data);
+    if hash.is_err() {
+        return Ok(HttpResponse::Ok().json(hash.err().unwrap().toJson()));
+    }
+    let hash = hash.unwrap();
+
     let data = ipfsGet(&client, hash).await;
+    if data.is_err() {
+        return Ok(HttpResponse::Ok().json(ErrorJson::new(IPFS_HASH_ERROR)));
+    }
+    let data = data.unwrap();
+
     let data = DecodeData{
         data: data,
     };
@@ -150,10 +173,27 @@ async fn decode_transaction_info(data: web::Json<DecodeData>) -> Result<HttpResp
 }
 
 #[post("/encode_transaction")]
-async fn encode_transaction(data: web::Json<QntTransactionJson>) -> Result<HttpResponse, actix_web::Error> {
+async fn encode_transaction(client: web::Data<Mutex<IpfsClient>>, data: web::Json<QntTransactionJson>) -> Result<HttpResponse, actix_web::Error> {
     println!("-----encode transaction-----");
-    let data = data.0.parse().encode();
-    Ok(HttpResponse::Ok().json(data))
+    let data = data.0.parse();
+    match data {
+        Err(err) => {
+            Ok(HttpResponse::Ok().json(err.toJson()))
+        },
+        Ok(res) => {
+            let pubkey = ipfsGet(&client, res.from_qnt_pubkey.icc_key_hash).await;
+            if pubkey.is_err() {
+                return Ok(HttpResponse::Ok().json(ErrorJson::new(FROM_PUBKEY_ERROR)));
+            }
+
+            let pubkey = ipfsGet(&client, res.to_qnt_pubkey.icc_key_hash).await;
+            if pubkey.is_err() {
+                return Ok(HttpResponse::Ok().json(ErrorJson::new(TO_PUBKEY_ERROR)));
+            }
+
+            Ok(HttpResponse::Ok().json(res.encode()))
+        }
+    }
 }
 
 #[post("/decode_transaction")]
@@ -219,7 +259,7 @@ async fn qnt_keypair(client: web::Data<Mutex<IpfsClient>>, data: web::Json<EccKe
     let icc_secret = sk.as_bytes().to_vec();
     println!("icc_pubkey: {}", base64::encode(&icc_pubkey));
 
-    let icc_pk_hash = ipfsSave(&client, icc_pubkey).await.unwrap();
+    let icc_pk_hash = ipfsSave(&client, icc_pubkey).await;
 
     println!("icc_pubkey_ipfs_hash: {}", base64::encode(icc_pk_hash));
 
@@ -247,12 +287,23 @@ async fn qnt_keypair(client: web::Data<Mutex<IpfsClient>>, data: web::Json<EccKe
 async fn icc_sign(client: web::Data<Mutex<IpfsClient>>, data: web::Json<IccSign>) -> Result<HttpResponse, actix_web::Error> {
     println!("-----sign message-----");
     let data = data.0;
-    let message = base64::decode(data.message).unwrap();
-    let qnt_secret = QntSecretKey::decode(data.secret_key).icc_key;
 
-    let sk  =  pqcrypto_dilithium::dilithium2::SecretKey::from_bytes(qnt_secret.as_slice()).unwrap();
+    let message = base64::decode(data.message).unwrap();
+
+    let qnt_secret = QntSecretKey::decode(data.secret_key);
+    if qnt_secret.is_err() {
+        return Ok(HttpResponse::Ok().json(qnt_secret.err().unwrap().toJson()));
+    }
+    let qnt_secret = qnt_secret.unwrap().icc_key;
+
+    let sk  =  pqcrypto_dilithium::dilithium2::SecretKey::from_bytes(qnt_secret.as_slice());
+    if sk.is_err() {
+        return Ok(HttpResponse::Ok().json(ErrorJson::new(SECRET_ERROR)));
+    }
+    let sk = sk.unwrap();
+
     let det_sig = detached_sign(&message, &sk);
-    let sign_msg = ipfsSave(&client, det_sig.as_bytes().to_vec()).await.unwrap();
+    let sign_msg = ipfsSave(&client, det_sig.as_bytes().to_vec()).await;
 
     let data = Signature{
         signature: base64::encode(sign_msg),
@@ -266,28 +317,38 @@ async fn icc_sign(client: web::Data<Mutex<IpfsClient>>, data: web::Json<IccSign>
 async fn icc_verify(client: web::Data<Mutex<IpfsClient>>, data: web::Json<VerifyMessage>) -> Result<HttpResponse, actix_web::Error> {
     println!("-----verify message-----");
     let data = data.0;
+
     let qnt_key = QntPublicKey::decode(data.public_key);
+    if qnt_key.is_err() {
+        return Ok(HttpResponse::Ok().json(qnt_key.err().unwrap().toJson()));
+    }
+    let qnt_key = qnt_key.unwrap();
 
     let pk = ipfsGet(&client, qnt_key.icc_key_hash).await;
-    let sig = ipfsGet(&client, base64::decode(data.signature).unwrap().try_into().unwrap()).await;
+    if pk.is_err() {
+        return Ok(HttpResponse::Ok().json(ErrorJson::new(PUBKEY_ERROR)));
+    }
+    let pk = pk.unwrap();
+
+    let sig = ipfsGet(&client, base64::decode(data.signature).unwrap().try_into().unwrap()).await.unwrap();
     let msg = base64::decode(data.message).unwrap();
     
     let pk = pqcrypto_dilithium::dilithium2::PublicKey::from_bytes(pk.as_slice()).unwrap();
     let sig = pqcrypto_dilithium::dilithium2::DetachedSignature::from_bytes(sig.as_slice()).unwrap();
-    let isok = !verify_detached_signature(&sig, &msg, &pk).ok().is_none();
-
-    let mut data: Signature = Signature{
-        signature: "".to_string(),
-    };
-
-    if isok {
-        let keys = VALIDATOR_KEYPAIR.lock().unwrap();
-        let sk_bytes = base64::decode(&keys.secret_key).unwrap();
-        let sk =  pqcrypto_dilithium::dilithium2::SecretKey::from_bytes(&sk_bytes).unwrap();
-        let sig = ipfsSave(&client, sign(&msg, &sk).as_bytes().to_vec()).await.unwrap();
-        data.signature = base64::encode(sig);
-        println!("ipfs_validator_signature_hash: {}", data.signature);
+    if verify_detached_signature(&sig, &msg, &pk).is_err() {
+        return Ok(HttpResponse::Ok().json(ErrorJson::new(VERIFY_ERROR)));
     }
+
+    let keys = VALIDATOR_KEYPAIR.lock().unwrap();
+    let sk_bytes = base64::decode(&keys.secret_key).unwrap();
+    let sk =  pqcrypto_dilithium::dilithium2::SecretKey::from_bytes(&sk_bytes).unwrap();
+    let sig = ipfsSave(&client, sign(&msg, &sk).as_bytes().to_vec()).await;
+    
+    let data: Signature = Signature{
+        signature: base64::encode(sig),
+    };
+    
+    println!("ipfs_validator_signature_hash: {}", data.signature);
     
     Ok(HttpResponse::Ok().json(data))
 }

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use borsh::{BorshDeserialize, BorshSerialize};
+use crate::errors::IccError;
 
 use crate::icc_types::{
     QntPublicKey,
@@ -52,8 +53,8 @@ pub struct DecodeData{
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct QntTransaction{
-    from_qnt_pubkey: QntPublicKey,
-    to_qnt_pubkey: QntPublicKey,
+    pub from_qnt_pubkey: QntPublicKey,
+    pub to_qnt_pubkey: QntPublicKey,
     amount: u64,
 }
 
@@ -103,12 +104,24 @@ impl InstructionAirdrop{
 
 
 impl QntTransactionJson{
-    pub fn parse(self) -> QntTransaction{
-        QntTransaction{
-            from_qnt_pubkey: QntPublicKey::decode(self.from_qnt_pubkey),
-            to_qnt_pubkey: QntPublicKey::decode(self.to_qnt_pubkey),
-            amount: self.amount,
+    pub fn parse(self) -> Result<QntTransaction, IccError>{
+        let from_pubkey = QntPublicKey::decode(self.from_qnt_pubkey);
+        if from_pubkey.is_err() {
+            return Err(IccError::FromPubkeyError);
         }
+        let from_pubkey = from_pubkey.unwrap();
+
+        let to_pubkey = QntPublicKey::decode(self.to_qnt_pubkey);
+        if to_pubkey.is_err() {
+            return Err(IccError::ToPubkeyError);
+        }
+        let to_pubkey = to_pubkey.unwrap();
+        
+        Ok(QntTransaction{
+            from_qnt_pubkey: from_pubkey,
+            to_qnt_pubkey: to_pubkey,
+            amount: self.amount,
+        })
     }
     pub fn decode(data: EncodeData) -> QntTransactionJson{
         QntTransaction::try_from_slice(base64::decode(data.data).unwrap().as_slice()).unwrap().decode()

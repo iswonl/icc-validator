@@ -1,6 +1,9 @@
 use base58::{ToBase58, FromBase58};
 use serde::{Deserialize, Serialize};
 use borsh::{BorshDeserialize, BorshSerialize};
+use std::error::Error;
+
+use crate::errors::IccError;
 
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -74,8 +77,12 @@ pub struct VerifyMessage {
 }
 
 impl IpfsHash{
-    pub fn decode(data: String) -> [u8;32]{
-        IpfsHash::try_from_slice(data.from_base58().unwrap().as_slice()).unwrap().hash
+    pub fn decode(data: String) -> Result<[u8;32], IccError>{
+        let data = data.from_base58();
+        if data.is_err() {
+            return Err(IccError::IpfsHashError);
+        }
+        Ok(IpfsHash::try_from_slice(data.unwrap().as_slice()).unwrap().hash)
     }
     pub fn encode(hash: [u8;32]) -> String{
         IpfsHash{
@@ -87,8 +94,16 @@ impl IpfsHash{
 }
 
 impl QntPublicKey{
-    pub fn decode(data: String) -> QntPublicKey{
-        QntPublicKey::try_from_slice(base64::decode(data).unwrap().as_slice()).unwrap()
+    pub fn decode(data: String) ->  Result<QntPublicKey, IccError>{
+        let arr = base64::decode(data);
+        if arr.is_err() {
+            return Err(IccError::PubkeyError);
+        }
+        let key = QntPublicKey::try_from_slice(arr.unwrap().as_slice());
+        if key.is_err() {
+            return Err(IccError::PubkeyError);
+        }
+        Ok(key.unwrap())
     }
     pub fn encode(self) -> String{
         base64::encode(self.try_to_vec().unwrap())
@@ -96,8 +111,16 @@ impl QntPublicKey{
 }
 
 impl QntSecretKey{
-    pub fn decode(data: String) -> QntSecretKey{
-        QntSecretKey::try_from_slice(base64::decode(data).unwrap().as_slice()).unwrap()
+    pub fn decode(data: String) -> Result<QntSecretKey, IccError>{
+        let arr = base64::decode(data);
+        if arr.is_err() {
+            return Err(IccError::SecretError);
+        }
+        let key = QntSecretKey::try_from_slice(arr.unwrap().as_slice());
+        if key.is_err() {
+            return Err(IccError::SecretError);
+        }
+        Ok(key.unwrap())
     }
     pub fn encode(self) -> String{
         base64::encode(self.try_to_vec().unwrap())
@@ -116,8 +139,8 @@ impl QntKeypair{
 impl QntKeypairJson{
     pub fn parse(self) -> QntKeypair{
         QntKeypair{
-            public_key: QntPublicKey::decode(self.public_key),
-            secret_key: QntSecretKey::decode(self.secret_key),
+            public_key: QntPublicKey::decode(self.public_key).ok().unwrap(),
+            secret_key: QntSecretKey::decode(self.secret_key).ok().unwrap(),
         }
     }
 }
@@ -125,7 +148,7 @@ impl QntKeypairJson{
 impl QntKeyJson{
     pub fn decodePublicKey(self) -> EccKeyJson{
         EccKeyJson{
-            key: QntPublicKey::decode(self.key).ecc_key.to_base58(),
+            key: QntPublicKey::decode(self.key).unwrap().ecc_key.to_base58(),
         }
     }
 }

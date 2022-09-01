@@ -22,7 +22,7 @@ pub struct QntTransactionInfoJson{
     sender_signature_hash: String,
     validator_signature_hash: String,
     amount: u64,
-    block_hash: String,
+    pub block_hash: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -41,7 +41,7 @@ impl QntTransactionInfoJson{
         let block_hash = if self.block_hash == "" {
             [0u8;32]
         }else{
-            IpfsHash::decode(self.block_hash)
+            IpfsHash::decode(self.block_hash).unwrap()
         };
         let tx = QntTransactionInfo{
             from_pubkey: base64::decode(self.from_pubkey).unwrap().try_into().unwrap(),
