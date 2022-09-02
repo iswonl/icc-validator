@@ -82,7 +82,15 @@ impl IpfsHash{
         if data.is_err() {
             return Err(IccError::IpfsHashError);
         }
-        Ok(IpfsHash::try_from_slice(data.unwrap().as_slice()).unwrap().hash)
+        let data = data.unwrap();
+
+        let hash = IpfsHash::try_from_slice(data.as_slice());
+        if hash.is_err() {
+            return Err(IccError::IpfsHashError);
+        }
+        let hash = hash.unwrap().hash;
+
+        Ok(hash)
     }
     pub fn encode(hash: [u8;32]) -> String{
         IpfsHash{
