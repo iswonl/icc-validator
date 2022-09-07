@@ -151,9 +151,7 @@ async fn get_transaction_info(client: web::Data<Mutex<IpfsClient>>, data: web::J
     }
     let data = data.unwrap();
 
-    let data = DecodeData{
-        data: data,
-    };
+    let data = QntTransactionInfoJson::decode(data);
 
     Ok(HttpResponse::Ok().json(data))
 }
