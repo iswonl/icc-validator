@@ -11,6 +11,7 @@ pub struct QntTransactionInfo{
     pub sender_signature_hash: [u8;32],
     pub validator_signature_hash: [u8;32],
     pub amount: u64,
+    pub time: u64,
     pub previous_block_hash: [u8;32],
 }
 
@@ -22,6 +23,7 @@ pub struct QntTransactionInfoJson{
     sender_signature_hash: String,
     validator_signature_hash: String,
     amount: u64,
+    time: u64,
     pub block_hash: String,
 }
 
@@ -50,6 +52,7 @@ impl QntTransactionInfoJson{
             sender_signature_hash: base64::decode(self.sender_signature_hash).unwrap().try_into().unwrap(),
             validator_signature_hash: base64::decode(self.validator_signature_hash).unwrap().try_into().unwrap(),
             amount: self.amount,
+            time: self.time,
             previous_block_hash: block_hash,
         };
         tx.try_to_vec().unwrap()
@@ -63,6 +66,7 @@ impl QntTransactionInfoJson{
             sender_signature_hash: base64::encode(tx.sender_signature_hash),
             validator_signature_hash: base64::encode(tx.validator_signature_hash),
             amount: tx.amount,
+            time: tx.time,
             block_hash: IpfsHash::encode(tx.previous_block_hash),
         }
     }
@@ -74,6 +78,7 @@ impl QntTransactionInfoJson{
             sender_signature_hash: base64::encode(tx.sender_signature_hash),
             validator_signature_hash: base64::encode(tx.validator_signature_hash),
             amount: tx.amount,
+            time: tx.time,
             block_hash: IpfsHash::encode(tx.previous_block_hash),
         }
     }
