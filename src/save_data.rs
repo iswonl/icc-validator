@@ -40,7 +40,7 @@ pub struct InfoListJson {
 
 impl QntTransactionInfoJson{
     pub fn encode(self) -> Vec<u8>{
-        let block_hash = if self.block_hash == "" {
+        let block_hash = if self.block_hash == "GENESIS_BLOCK" {
             [0u8;32]
         }else{
             IpfsHash::decode(self.block_hash).unwrap()
@@ -59,18 +59,14 @@ impl QntTransactionInfoJson{
     }
     pub fn decode(data: Vec<u8>) -> QntTransactionInfoJson{
         let tx = QntTransactionInfo::try_from_slice(data.as_slice()).unwrap();
-        QntTransactionInfoJson{
-            from_pubkey: base64::encode(tx.from_pubkey),
-            to_pubkey: base64::encode(tx.to_pubkey),
-            transaction_signature: tx.transaction_signature.to_base58(),
-            sender_signature_hash: base64::encode(tx.sender_signature_hash),
-            validator_signature_hash: base64::encode(tx.validator_signature_hash),
-            amount: tx.amount,
-            time: tx.time,
-            block_hash: IpfsHash::encode(tx.previous_block_hash),
-        }
+        QntTransactionInfoJson::from(&tx)
     }
     pub fn from(tx: &QntTransactionInfo) -> QntTransactionInfoJson{
+        let hash = if tx.previous_block_hash == [0u8;32] {
+            "GENESIS_BLOCK".to_string()
+        }else{
+            IpfsHash::encode(tx.previous_block_hash)
+        };
         QntTransactionInfoJson{
             from_pubkey: base64::encode(tx.from_pubkey),
             to_pubkey: base64::encode(tx.to_pubkey),
@@ -79,7 +75,7 @@ impl QntTransactionInfoJson{
             validator_signature_hash: base64::encode(tx.validator_signature_hash),
             amount: tx.amount,
             time: tx.time,
-            block_hash: IpfsHash::encode(tx.previous_block_hash),
+            block_hash: hash,
         }
     }
 }
