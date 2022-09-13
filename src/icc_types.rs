@@ -154,9 +154,13 @@ impl QntKeypairJson{
 }
 
 impl QntKeyJson{
-    pub fn decodePublicKey(self) -> EccKeyJson{
-        EccKeyJson{
-            key: QntPublicKey::decode(self.key).unwrap().ecc_key.to_base58(),
+    pub fn decodePublicKey(self) -> Result<EccKeyJson, IccError>{
+        let key = QntPublicKey::decode(self.key);
+        if key.is_err() {
+            return Err(IccError::PubkeyError);
         }
+        Ok(EccKeyJson{
+            key: key.unwrap().ecc_key.to_base58(),
+        })
     }
 }

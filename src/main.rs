@@ -239,9 +239,13 @@ async fn tx_airdrop(data: web::Json<InstructionAirdrop>) -> Result<HttpResponse,
 }
 
 #[post("/get_ecc_pubkey")]
-async fn get_ecc_pubkey(client: web::Data<Mutex<IpfsClient>>, data: web::Json<QntKeyJson>) -> Result<HttpResponse, actix_web::Error> {
+async fn get_ecc_pubkey( data: web::Json<QntKeyJson>) -> Result<HttpResponse, actix_web::Error> {
     println!("-----get ecc pubkey-----");
     let ecc_key = data.0.decodePublicKey();
+    if ecc_key.is_err() {
+        return Ok(HttpResponse::Ok().json(IccError::PubkeyError.toJson()));
+    }
+    let ecc_key = ecc_key.unwrap();
     println!("ecc_pubkey: {}", ecc_key.key);
     Ok(HttpResponse::Ok().json(ecc_key))
 }
